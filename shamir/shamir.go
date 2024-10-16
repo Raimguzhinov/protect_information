@@ -2,9 +2,9 @@ package shamir
 
 import (
 	"fmt"
+	"github.com/Raimguzhinov/protect_information/common"
 	"io"
 	"os"
-	"protect_information/common"
 )
 
 type shamirCipher struct {

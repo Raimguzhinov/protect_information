@@ -1,8 +1,8 @@
 package main
 
 import (
+	"github.com/Raimguzhinov/protect_information/common"
 	"log"
-	"protect_information/common"
 )
 
 func main() {

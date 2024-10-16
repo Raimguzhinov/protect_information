@@ -2,6 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/Raimguzhinov/protect_information/common"
+	"github.com/Raimguzhinov/protect_information/elgamal"
+	"github.com/Raimguzhinov/protect_information/rsa"
+	"github.com/Raimguzhinov/protect_information/shamir"
+	"github.com/Raimguzhinov/protect_information/vernam"
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/selection"
 	"github.com/erikgeiser/promptkit/textinput"
@@ -10,11 +15,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"protect_information/common"
-	"protect_information/elgamal"
-	"protect_information/rsa"
-	"protect_information/shamir"
-	"protect_information/vernam"
 	"strings"
 	"sync"
 	"time"
