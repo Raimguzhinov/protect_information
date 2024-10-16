@@ -52,8 +52,8 @@ func generateKeyPair(p int64) (int64, int64, error) {
 
 // Генерация секретного ключа с использованием расширенного алгоритма Евклида
 func generateSecretKey(cA, p int64) (int64, error) {
-	gcd, _, y, err := common.GCDExtended(p-1, cA)
-	if err != nil || gcd != 1 {
+	gcd, _, y := common.GCDExtended(p-1, cA)
+	if gcd != 1 {
 		return -1, fmt.Errorf("error: cA and p-1 are not relatively prime")
 	}
 	d := y
