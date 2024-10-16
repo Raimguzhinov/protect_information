@@ -1,4 +1,4 @@
-module protect_information
+module github.com/Raimguzhinov/protect_information
 
 go 1.20
 
