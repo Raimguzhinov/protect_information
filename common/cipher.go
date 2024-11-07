@@ -9,13 +9,13 @@ import (
 type Cipher interface {
 	Encrypt() error
 	Decrypt() error
-	Do() error
+	EncryptAndDecrypt() error
 }
 
 // WriteNumbers Запись чисел в io.Writer
 func WriteNumbers(w io.Writer, data []int64) error {
 	for _, num := range data {
-		if err := binary.Write(w, binary.LittleEndian, uint8(num)); err != nil {
+		if err := binary.Write(w, binary.LittleEndian, num); err != nil {
 			return fmt.Errorf("error writing number to output: %v", err)
 		}
 	}
@@ -43,4 +43,20 @@ func WritePair(w io.Writer, encryptedMessage [][2]int64) error {
 		}
 	}
 	return nil
+}
+
+func ReadNumbers(r io.Reader) ([]int64, error) {
+	var numbers []int64
+	for {
+		var num int64
+		err := binary.Read(r, binary.LittleEndian, &num)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error reading number from input: %v", err)
+		}
+		numbers = append(numbers, num)
+	}
+	return numbers, nil
 }

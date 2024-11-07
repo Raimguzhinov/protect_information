@@ -92,7 +92,7 @@ func (sc *shamirCipher) Decrypt() error {
 }
 
 // Do - объединяет шифрование и дешифрование
-func (sc *shamirCipher) Do() error {
+func (sc *shamirCipher) EncryptAndDecrypt() error {
 	pwd, err := os.Getwd()
 	if err != nil {
 		fmt.Println(err)

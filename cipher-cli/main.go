@@ -102,7 +102,7 @@ func promptForPrimeWithRoot() (int64, int64, error) {
 	}
 	if confirmed {
 		var P, q int64
-		minV, maxV := 1_000_000, 1_000_000_000
+		minV, maxV := 1_000_000_000, 1_000_000_0000
 		for {
 			q = common.GenPrime(int64(minV), int64(maxV))
 			P = 2*q + 1
@@ -174,6 +174,16 @@ func promptForCipher() (string, error) {
 		return "", err
 	}
 	return cipher, nil
+}
+
+// Функция для выбора подписи
+func promptForSignature() (string, error) {
+	selectionPrompt := selection.New[string]("Select signature:", []string{"elgamal", "rsa", "ГОСТ"})
+	signature, err := selectionPrompt.RunPrompt()
+	if err != nil {
+		return "", err
+	}
+	return signature, nil
 }
 
 func InteractiveEncryptAndDecrypt() error {
@@ -290,11 +300,104 @@ func InteractiveEncryptAndDecrypt() error {
 	default:
 		return fmt.Errorf("invalid cipher: %s", cipherName)
 	}
-	return cipher.Do()
+	return cipher.EncryptAndDecrypt()
+}
+
+func InteractiveSignature() error {
+	var (
+		input     io.ReadCloser
+		output    io.ReadWriteCloser
+		wg        sync.WaitGroup
+		signature common.Signer
+	)
+	mode, err := promptForMode()
+	if err != nil {
+		return fmt.Errorf("error selecting mode: %v", err)
+	}
+	wg.Add(1)
+	switch mode {
+	case "text":
+		prompt := textinput.New("Enter message m (text): ")
+		prompt.Placeholder = "Example: hello, world"
+		m, err := prompt.RunPrompt()
+		if err != nil {
+			return err
+		}
+		input = io.NopCloser(strings.NewReader(m))
+		output, err = os.OpenFile("/Users/yanakosteva/Study/protect_information/signature.dat", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+		if err != nil {
+			log.Fatalf("Error: %v", err)
+		}
+		wg.Done()
+	case "file":
+		wg.Add(1)
+		var inputFile, outputSignFile string
+		inputFile, err = promptForFileName()
+		if err != nil {
+			return fmt.Errorf("error selecting input file: %v", err)
+		}
+		go func() {
+			defer wg.Done()
+			input, err = os.Open(inputFile)
+			if err != nil {
+				log.Fatalf("Error: %v", err)
+			}
+		}()
+		defer func() {
+			_ = input.Close()
+		}()
+		signPrompt := textinput.New("Enter name for the signed output file:")
+		signPrompt.Placeholder = "Example: signed_output.dat"
+		outputSignFile, err = signPrompt.RunPrompt()
+		if err != nil {
+			return fmt.Errorf("error entering signed file name: %v", err)
+		}
+		go func() {
+			defer wg.Done()
+			output, err = os.OpenFile(outputSignFile, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+			if err != nil {
+				log.Fatalf("Error: %v", err)
+			}
+		}()
+		defer func() {
+			_ = output.Close()
+		}()
+	default:
+		return fmt.Errorf("invalid action: %s", mode)
+	}
+	wg.Wait()
+	signatureName, err := promptForSignature()
+	if err != nil {
+		return err
+	}
+	switch signatureName {
+	case "elgamal":
+		p, g, err := promptForPrimeWithRoot()
+		if err != nil {
+			return fmt.Errorf("error selecting prime number: %v", err)
+		}
+		signature, err = elgamal.NewSignature(p, g, input, output)
+		if err != nil {
+			return err
+		}
+	case "rsa":
+		signature, err = rsa.NewSignature(input, output)
+		if err != nil {
+			return err
+		}
+	//case "ГОСТ":
+	//	signature, err = gost.NewCipher(input, output)
+	//	if err != nil {
+	//		return err
+	//	}
+	default:
+		return fmt.Errorf("invalid cipher: %s", signatureName)
+	}
+	return signature.SignAndVerify()
 }
 
 func main() {
-	if err := InteractiveEncryptAndDecrypt(); err != nil {
+	if err := InteractiveSignature(); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 }
