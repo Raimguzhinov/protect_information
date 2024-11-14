@@ -1,6 +1,10 @@
 package common
 
-import "testing"
+import (
+	"fmt"
+	"math/big"
+	"testing"
+)
 
 func TestModularExponentiation(t *testing.T) {
 	type args struct {
@@ -41,4 +45,15 @@ func TestModularExponentiation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Тест функции ModularExponentiationBig
+func TestModularExponentiationBig(t *testing.T) {
+	base := big.NewInt(2)
+	exp := big.NewInt(5)
+	mod := big.NewInt(13)
+	result := ModularExponentiationBig(base, exp, mod)
+
+	// Ожидается, что (2^5) % 13 == 6
+	fmt.Printf("Result of 2^5 mod 13: %s (ожидается 6)\n", result.String())
 }

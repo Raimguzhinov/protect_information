@@ -3,8 +3,8 @@ package vernam
 import (
 	"bytes"
 	"fmt"
-	"github.com/Raimguzhinov/protect_information/common"
-	"github.com/Raimguzhinov/protect_information/elgamal"
+	"github.com/Raimguzhinov/protect-information/common"
+	"github.com/Raimguzhinov/protect-information/elgamal"
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/textinput"
 	"io"

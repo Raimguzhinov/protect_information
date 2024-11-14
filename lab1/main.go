@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/Raimguzhinov/protect_information/common"
+	"github.com/Raimguzhinov/protect-information/common"
 	"log"
 )
 

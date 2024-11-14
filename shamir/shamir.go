@@ -2,7 +2,7 @@ package shamir
 
 import (
 	"fmt"
-	"github.com/Raimguzhinov/protect_information/common"
+	"github.com/Raimguzhinov/protect-information/common"
 	"io"
 	"os"
 )

@@ -2,9 +2,8 @@ package elgamal
 
 import (
 	"crypto/md5"
-	"encoding/binary"
 	"fmt"
-	"github.com/Raimguzhinov/protect_information/common"
+	"github.com/Raimguzhinov/protect-information/common"
 	"io"
 	"math/big"
 	"os"
@@ -29,7 +28,6 @@ func newElgamalAlgorithm(p, g int64) (*ElgamalCipher, error) {
 		P: p,
 		G: g,
 	}
-
 	// Генерация приватного и публичного ключей
 	var err error
 	c.X, c.Y, err = generateKeyPair(c.P, c.G)
@@ -92,7 +90,7 @@ func (ec *ElgamalCipher) Decrypt() error {
 	return common.WriteData(ec.OutputDecrypted, decryptedMessage)
 }
 
-// Do - объединяет шифрование и дешифрование
+// EncryptAndDecrypt - объединяет шифрование и дешифрование
 func (ec *ElgamalCipher) EncryptAndDecrypt() error {
 	pwd, err := os.Getwd()
 	if err != nil {
@@ -120,75 +118,126 @@ func (ec *ElgamalCipher) GetDecryptMsg() []byte {
 	return ec.msg
 }
 
-func NewSignature(p, g int64, input io.Reader, output io.ReadWriter) (common.Signer, error) {
-	c, err := newElgamalAlgorithm(p, g)
-	if err != nil {
-		return nil, err
-	}
-	c.Input = input
-	c.OutputSigned = output
-	return c, nil
+// elgamalSignature содержит параметры и результаты подписи
+type elgamalSignature struct {
+	P            *big.Int // Простое число (модуль)
+	G            *big.Int // Основание (генератор группы)
+	X            *big.Int // Секретный ключ
+	Y            *big.Int // Публичный ключ Y = G^X mod P
+	R            *big.Int // Часть подписи
+	Signature    *big.Int // Подпись
+	Input        io.Reader
+	OutputSigned io.Writer
+	Message      []byte // Сообщение для подписи
 }
 
-func (c *ElgamalCipher) Sign() error {
-	message, err := io.ReadAll(c.Input)
+func NewSignature(p, g *big.Int, input io.Reader, output io.ReadWriter) (common.Signer, error) {
+	es := elgamalSignature{
+		P: p,
+		G: g,
+		X: GenerateX(p),
+	}
+	es.Y = common.ModularExponentiationBig(g, es.X, p)
+	es.Input = input
+	es.OutputSigned = output
+	return &es, nil
+}
+
+func GenerateX(p *big.Int) *big.Int {
+	one := big.NewInt(1)
+	maximum := new(big.Int).Sub(p, one) // P - 1
+	for {
+		x := new(big.Int).Rand(common.SeedBig(), maximum)
+		if x.Cmp(one) > 0 {
+			return x
+		}
+	}
+}
+
+func (es *elgamalSignature) Sign() error {
+	message, err := io.ReadAll(es.Input)
 	if err != nil {
 		return err
 	}
 	hash := md5.Sum(message)
-	hashInt0 := new(big.Int).SetUint64(binary.BigEndian.Uint64(hash[:8]))
-	pBigInt := big.NewInt(c.P)
-	hashInt := hashInt0.Mod(hashInt0, pBigInt).Int64()
-
-	if hashInt >= c.P || hashInt <= 0 {
-		return fmt.Errorf("hashInt >= c.P || hashInt <= 0")
+	hashInt := new(big.Int).SetBytes(hash[:])
+	// Приводим хеш к модулю (P - 1), чтобы h < P - 1
+	hashInt.Mod(hashInt, new(big.Int).Sub(es.P, big.NewInt(1)))
+	fmt.Printf("Message hash (as int): %s\n", hashInt.String())
+	// k ∈ [2, P-2], gcd(k, P - 1) = 1
+	k := common.GenCoprimeBig(new(big.Int).Sub(es.P, big.NewInt(1)), big.NewInt(2), new(big.Int).Sub(es.P, big.NewInt(2)))
+	// R = G^k mod P
+	es.R = common.ModularExponentiationBig(es.G, k, es.P)
+	// u = (h - x*R) mod (P - 1)
+	u := new(big.Int).Sub(hashInt, new(big.Int).Mul(es.X, es.R))
+	u.Mod(u, new(big.Int).Sub(es.P, big.NewInt(1)))
+	if u.Cmp(big.NewInt(0)) < 0 {
+		u.Add(u, new(big.Int).Sub(es.P, big.NewInt(1)))
 	}
-	k := common.GenCoprime(c.P-1, 2, c.P-2)
-	c.R = common.ModularExponentiation(c.G, k, c.P)
-	u := (hashInt - c.X*c.R) % (c.P - 1)
-	u = (u + (c.P - 1)) % (c.P - 1)
-	gcd, k1, _ := common.GCDExtended(k, c.P-1)
-	if gcd != 1 {
-		return fmt.Errorf("gcd(%d, %d) != 1", k, c.P-1)
+	// gcd(k, P-1) = 1, находим k1 = k^(-1) mod (P - 1)
+	gcd, k1, _ := common.GCDExtendedBig(k, new(big.Int).Sub(es.P, big.NewInt(1)))
+	if gcd.Cmp(big.NewInt(1)) != 0 {
+		return fmt.Errorf("gcd(%s, %s) != 1", k.String(), new(big.Int).Sub(es.P, big.NewInt(1)).String())
 	}
-	c.signature = (u * k1) % (c.P - 1)
-	c.msgBuf = message
-	return common.WriteNumbers(c.OutputSigned, []int64{c.signature})
+	// Приводим k1 к модулю (P - 1)
+	//k1.Mod(k1, new(big.Int).Sub(es.P, big.NewInt(1)))
+	//if k1.Cmp(big.NewInt(0)) < 0 {
+	//	k1.Add(k1, new(big.Int).Sub(es.P, big.NewInt(1)))
+	//}
+	// S = (u * k^(-1)) mod (P - 1)
+	es.Signature = new(big.Int).Mul(u, k1)
+	es.Signature.Mod(es.Signature, new(big.Int).Sub(es.P, big.NewInt(1)))
+	fmt.Printf("Подпись создана: S = %s", es.Signature.String())
+	es.Message = message
+	return common.WriteNumbers(es.OutputSigned, []int64{es.Signature.Int64()})
 }
 
-func (c *ElgamalCipher) Verify() (bool, error) {
-	hash := md5.Sum(c.msgBuf)
-	hashInt0 := new(big.Int).SetUint64(binary.BigEndian.Uint64(hash[:8]))
-	pBigInt := big.NewInt(c.P)
-	hashInt := hashInt0.Mod(hashInt0, pBigInt).Int64()
-	yr := common.ModularExponentiation(c.Y, c.R, c.P) * common.ModularExponentiation(c.R, c.signature, c.P) % c.P
-	g := common.ModularExponentiation(c.G, hashInt, c.P)
-	return yr == g, nil
+func (es *elgamalSignature) Verify() (bool, error) {
+	// Шаг 1: Вычисление хеша от сохраненного сообщения
+	hash := md5.Sum(es.Message)
+	hashInt := new(big.Int).SetBytes(hash[:])
+	// Приводим хеш к модулю (P - 1), чтобы h < P - 1
+	// hashInt = h mod (P - 1)
+	hashInt.Mod(hashInt, new(big.Int).Sub(es.P, big.NewInt(1)))
+	fmt.Printf("Message hash (as int): %s\n", hashInt.String())
+	// Шаг 2: Вычисление значения yr = Y^R * R^S mod P
+	// yr = Y^R * R^S mod P
+	yr := new(big.Int).Mul(
+		common.ModularExponentiationBig(es.Y, es.R, es.P),         // Y^R mod P
+		common.ModularExponentiationBig(es.R, es.Signature, es.P), // R^S mod P
+	)
+	yr.Mod(yr, es.P) // Приводим к модулю P
+	// Шаг 3: Вычисление g = G^h mod P
+	// g = G^h mod P
+	g := common.ModularExponentiationBig(es.G, hashInt, es.P)
+	// Шаг 4: Сравнение yr и g
+	// Подпись верна, если yr == g
+	return yr.Cmp(g) == 0, nil
 }
 
-func (c *ElgamalCipher) SignAndVerify() error {
+func (es *elgamalSignature) SignAndVerify() error {
 	pwd, err := os.Getwd()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	fmt.Print("Signed: ")
-	if err = c.Sign(); err != nil {
+	if err = es.Sign(); err != nil {
 		return err
 	}
-	if _, ok := c.Input.(*os.File); ok {
-		fmt.Print(pwd + "/" + c.OutputSigned.(*os.File).Name())
+	if _, ok := es.Input.(*os.File); ok {
+		fmt.Print(pwd + "/" + es.OutputSigned.(*os.File).Name())
 	}
-	if out, ok := c.OutputSigned.(*os.File); ok {
+	if out, ok := es.OutputSigned.(*os.File); ok {
 		_ = out.Sync()
 		defer out.Close()
-		c.OutputSigned, err = os.OpenFile(out.Name(), os.O_RDONLY, 0600)
+		es.OutputSigned, err = os.OpenFile(out.Name(), os.O_RDONLY, 0600)
 		if err != nil {
 			return err
 		}
 	}
 	fmt.Print("\nVerified: ")
-	ok, err := c.Verify()
+	ok, err := es.Verify()
 	if err != nil {
 		return err
 	}

@@ -2,17 +2,19 @@ package main
 
 import (
 	"fmt"
-	"github.com/Raimguzhinov/protect_information/common"
-	"github.com/Raimguzhinov/protect_information/elgamal"
-	"github.com/Raimguzhinov/protect_information/rsa"
-	"github.com/Raimguzhinov/protect_information/shamir"
-	"github.com/Raimguzhinov/protect_information/vernam"
+	"github.com/Raimguzhinov/protect-information/common"
+	"github.com/Raimguzhinov/protect-information/elgamal"
+	"github.com/Raimguzhinov/protect-information/gost"
+	"github.com/Raimguzhinov/protect-information/rsa"
+	"github.com/Raimguzhinov/protect-information/shamir"
+	"github.com/Raimguzhinov/protect-information/vernam"
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/selection"
 	"github.com/erikgeiser/promptkit/textinput"
 	"github.com/ktr0731/go-fuzzyfinder"
 	"io"
 	"log"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -372,11 +374,28 @@ func InteractiveSignature() error {
 	}
 	switch signatureName {
 	case "elgamal":
-		p, g, err := promptForPrimeWithRoot()
-		if err != nil {
-			return fmt.Errorf("error selecting prime number: %v", err)
+		var P, q *big.Int
+		minV := big.NewInt(1_000_000_000)
+		maxV := big.NewInt(10_000_000_000)
+		// Генерация простого числа q и проверка, что P = 2q + 1 также простое
+		for {
+			q = common.GenPrimeBig(minV, maxV)
+			P = new(big.Int).Mul(q, big.NewInt(2))
+			P.Add(P, big.NewInt(1)) // P = 2 * q + 1
+
+			if common.IsPrimeBig(P) {
+				break
+			}
 		}
-		signature, err = elgamal.NewSignature(p, g, input, output)
+		// Поиск примитивного корня g
+		g := big.NewInt(0)
+		for i := big.NewInt(2); i.Cmp(new(big.Int).Sub(P, big.NewInt(1))) < 0; i.Add(i, big.NewInt(1)) {
+			g.Set(i)
+			if common.ModularExponentiationBig(g, q, P).Cmp(big.NewInt(1)) != 0 {
+				break
+			}
+		}
+		signature, err = elgamal.NewSignature(P, g, input, output)
 		if err != nil {
 			return err
 		}
@@ -385,11 +404,11 @@ func InteractiveSignature() error {
 		if err != nil {
 			return err
 		}
-	//case "ГОСТ":
-	//	signature, err = gost.NewCipher(input, output)
-	//	if err != nil {
-	//		return err
-	//	}
+	case "ГОСТ":
+		signature, err = gost.NewSignature(input, output)
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("invalid cipher: %s", signatureName)
 	}

@@ -3,7 +3,7 @@ package rsa
 import (
 	"crypto/md5"
 	"fmt"
-	"github.com/Raimguzhinov/protect_information/common"
+	"github.com/Raimguzhinov/protect-information/common"
 	"io"
 	"os"
 )
@@ -28,7 +28,7 @@ func newRsaAlgorithm() (*rsaCipher, error) {
 		Q: Q,
 	}
 	// Вычисляем N = P * Q и Phi = (P-1)*(Q-1)
-	c.N = c.P * c.Q
+	c.N = c.P * c.Q // N - открытый
 	c.Phi = (c.P - 1) * (c.Q - 1)
 	var err error
 	c.PublicD = common.GenCoprime(c.Phi, 2, c.Phi-1)
@@ -71,7 +71,7 @@ func (rc *rsaCipher) Decrypt() error {
 	return common.WriteNumbers(rc.OutputDecrypted, decryptedMessage)
 }
 
-// Do - объединяет шифрование и дешифрование
+// EncryptAndDecrypt - объединяет шифрование и дешифрование
 func (rc *rsaCipher) EncryptAndDecrypt() error {
 	pwd, err := os.Getwd()
 	if err != nil {
@@ -112,14 +112,17 @@ func (rc *rsaCipher) Sign() error {
 	}
 	hash := md5.Sum(message)
 	hashInt := int64(hash[0])
+	fmt.Printf("Message hash (as int): %d\n", hashInt)
 	rc.signature = common.ModularExponentiation(hashInt, rc.PrivateC, rc.N)
 	rc.msgBuf = message
+	fmt.Printf("Подпись создана: S = %d", rc.signature)
 	return common.WriteNumbers(rc.OutputSigned, []int64{rc.signature})
 }
 
 func (rc *rsaCipher) Verify() (bool, error) {
 	hash := md5.Sum(rc.msgBuf)
 	hashInt := int64(hash[0])
+	fmt.Printf("Message hash (as int): %d\n", hashInt)
 	w := common.ModularExponentiation(rc.signature, rc.PublicD, rc.N)
 	return hashInt == w, nil
 }

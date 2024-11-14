@@ -1,6 +1,7 @@
 package common
 
 import (
+	"math/big"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -96,4 +97,75 @@ func PrimitiveRoot(p int64) int64 {
 		}
 	}
 	return -1 // Если не найдено (теоретически не должно происходить)
+}
+
+func GenPrimeBig(minV, maxV *big.Int) *big.Int {
+	for {
+		num := new(big.Int).Rand(SeedBig(), new(big.Int).Sub(maxV, minV))
+		num.Add(num, minV) // num = num + minV
+		if IsPrimeBig(num) {
+			return num
+		}
+	}
+}
+
+// IsPrimeBig проверяет, является ли число простым (используется алгоритм Ферма)
+func IsPrimeBig(p *big.Int) bool {
+	one := big.NewInt(1)
+	two := big.NewInt(2)
+	three := big.NewInt(3)
+	if p.Cmp(one) <= 0 {
+		return false
+	} else if p.Cmp(three) <= 0 {
+		return true
+	}
+	if new(big.Int).Mod(p, two).Cmp(big.NewInt(0)) == 0 {
+		return false
+	}
+	var wg sync.WaitGroup
+	wg.Add(runtime.NumCPU())
+	doneCh := make(chan bool, runtime.NumCPU())
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			defer wg.Done()
+			a := new(big.Int).Rand(SeedBig(), new(big.Int).Sub(p, two)) // [2, p-2]
+			a.Add(a, two)
+
+			if ModularExponentiationBig(a, new(big.Int).Sub(p, one), p).Cmp(one) == 0 {
+				doneCh <- true
+			}
+		}()
+	}
+	wg.Wait()
+	close(doneCh)
+	for v := range doneCh {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+
+// SeedBig возвращает новый источник случайных чисел
+func SeedBig() *rand.Rand {
+	return rand.New(rand.NewSource(time.Now().UnixNano()))
+}
+
+// GenCoprimeBig генерирует случайное число num в диапазоне [minV, maxV] такое, что GCD(n, num) = 1
+func GenCoprimeBig(n, minV, maxV *big.Int) *big.Int {
+	// Проверяем, что minV < maxV
+	if minV.Cmp(maxV) >= 0 {
+		return nil // Или можно выбросить ошибку
+	}
+	// Разница maxV - minV для генерации значения в диапазоне
+	rangeSize := new(big.Int).Sub(maxV, minV)
+	for {
+		// Генерируем случайное значение num в диапазоне [minV, maxV]
+		num := new(big.Int).Rand(SeedBig(), rangeSize)
+		num.Add(num, minV) // num = num + minV
+		// Проверяем, что num взаимно просто с n (GCD(n, num) == 1)
+		if new(big.Int).GCD(nil, nil, n, num).Cmp(big.NewInt(1)) == 0 {
+			return num
+		}
+	}
 }
