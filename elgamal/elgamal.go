@@ -200,17 +200,14 @@ func (es *elgamalSignature) Verify() (bool, error) {
 	// hashInt = h mod (P - 1)
 	hashInt.Mod(hashInt, new(big.Int).Sub(es.P, big.NewInt(1)))
 	fmt.Printf("Message hash (as int): %s\n", hashInt.String())
-	// Шаг 2: Вычисление значения yr = Y^R * R^S mod P
 	// yr = Y^R * R^S mod P
 	yr := new(big.Int).Mul(
 		common.ModularExponentiationBig(es.Y, es.R, es.P),         // Y^R mod P
 		common.ModularExponentiationBig(es.R, es.Signature, es.P), // R^S mod P
 	)
 	yr.Mod(yr, es.P) // Приводим к модулю P
-	// Шаг 3: Вычисление g = G^h mod P
 	// g = G^h mod P
 	g := common.ModularExponentiationBig(es.G, hashInt, es.P)
-	// Шаг 4: Сравнение yr и g
 	// Подпись верна, если yr == g
 	return yr.Cmp(g) == 0, nil
 }

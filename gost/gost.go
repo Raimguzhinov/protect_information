@@ -113,7 +113,6 @@ func (gs *gostSignature) Sign() error {
 		hashInt.Mod(hashInt, gs.Q)
 	}
 	fmt.Printf("Message hash (as int): %s\n", hashInt.String())
-	// Шаги 2–4: Генерация случайного числа k и вычисление R и S
 	for {
 		k := common.GenCoprimeBig(gs.Q, big.NewInt(1), new(big.Int).Sub(gs.Q, big.NewInt(1)))
 		r := common.ModularExponentiationBig(gs.A, k, gs.P)

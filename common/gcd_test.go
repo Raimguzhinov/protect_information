@@ -16,7 +16,7 @@ func TestGCDExtended(t *testing.T) {
 	}{
 		{
 			name:    "28x+19y=gcd(28,19)",
-			args:    args{a: 28, b: 19},
+			args:    args{a: 3, b: 22},
 			wantGcd: 1,
 			wantX:   -2,
 			wantY:   3,

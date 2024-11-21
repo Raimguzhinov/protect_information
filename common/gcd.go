@@ -76,15 +76,15 @@ func ModInverseBig(a, p *big.Int) (*big.Int, error) {
 	// Проверка, что a < p, и приведение к нужному диапазону
 	aMod := new(big.Int).Mod(a, p)
 	// Вычисляем GCD и коэффициенты с помощью GCDExtendedBig
-	gcd, _, y := GCDExtendedBig(aMod, p)
+	gcd, x, _ := GCDExtendedBig(aMod, p)
 	if gcd.Cmp(big.NewInt(1)) != 0 {
 		return nil, fmt.Errorf("no modular inverse exists for %s mod %s", a.String(), p.String())
 	}
 	// Убедимся, что y положительное
-	if y.Cmp(big.NewInt(0)) < 0 {
-		y.Add(y, p) // Приведение к положительному значению, если y < 0
+	if x.Cmp(big.NewInt(0)) < 0 {
+		x.Add(x, p) // Приведение к положительному значению, если y < 0
 	}
-	return y, nil
+	return x, nil
 }
 
 //// GCDExtended реализует расширенный алгоритм Евклида для нахождения GCD
