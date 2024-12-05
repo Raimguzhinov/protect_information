@@ -32,13 +32,13 @@ type Server struct {
 func NewServer() *Server {
 	// Генерируем простые числа p и q
 	bitSize := 1024
-	min := new(big.Int).Lsh(big.NewInt(1), uint(bitSize-1))
-	max := new(big.Int).Lsh(big.NewInt(1), uint(bitSize))
+	minV := new(big.Int).Lsh(big.NewInt(1), uint(bitSize-1))
+	maxV := new(big.Int).Lsh(big.NewInt(1), uint(bitSize))
 
-	p := common.GenPrimeBig(min, max)
-	q := common.GenPrimeBig(min, max)
+	p := common.GenPrimeBig(minV, maxV)
+	q := common.GenPrimeBig(minV, maxV)
 	for p.Cmp(q) == 0 {
-		q = common.GenPrimeBig(min, max)
+		q = common.GenPrimeBig(minV, maxV)
 	}
 
 	// Вычисляем n = p * q и φ(n) = (p - 1) * (q - 1)
@@ -154,7 +154,7 @@ func (c *Client) Vote(vote Vote) {
 	// Вычисляем слепое сообщение
 	rExpE := common.ModularExponentiationBig(r, c.server.d, c.server.n)
 	blindedHash := new(big.Int).Mul(hashInt, rExpE)
-	blindedHash.Mod(blindedHash, c.server.n)
+	//blindedHash.Mod(blindedHash, c.server.n)
 
 	// Получаем слепую подпись от сервера
 	blindSignature := c.server.GetBlindSignature(c.username, blindedHash)
@@ -168,7 +168,7 @@ func (c *Client) Vote(vote Vote) {
 		log.Fatalf("Ошибка при вычислении обратного к r: %v", err)
 	}
 	signature := new(big.Int).Mul(blindSignature, rInv)
-	signature.Mod(signature, c.server.n)
+	//signature.Mod(signature, c.server.n)
 
 	// Отправляем голос и подпись на сервер
 	if c.server.SubmitVote(m, signature) {
