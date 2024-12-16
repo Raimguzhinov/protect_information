@@ -22,6 +22,8 @@ import (
 	"github.com/samber/lo"
 )
 
+const verifyCount = 15
+
 type Edge struct {
 	From, To int
 }
@@ -168,8 +170,8 @@ func checkGraphColoring(graph *Graph) string {
 
 	for i := 0; i < graph.Vertices; i++ {
 		// Генерируем простые числа p и q
-		p[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
-		q[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
+		p[i] = common.GenPrimeBig(big.NewInt(3_250_000), big.NewInt(4_500_000_00))
+		q[i] = common.GenPrimeBig(big.NewInt(3_250_000), big.NewInt(4_500_000_00))
 		// Вычисляем n = p * q и φ(n) = (p - 1) * (q - 1)
 		n[i] = new(big.Int).Mul(p[i], q[i])
 		phi[i] = new(big.Int).Mul(new(big.Int).Sub(p[i], big.NewInt(1)), new(big.Int).Sub(q[i], big.NewInt(1)))
@@ -185,15 +187,24 @@ func checkGraphColoring(graph *Graph) string {
 		Z[i] = common.ModularExponentiationBig(r[i], d[i], n[i])
 	}
 
-	for _, edge := range graph.Edges {
+	// Проверка рёбер
+	for i := 0; i < verifyCount; i++ {
+		edgeIndex := rand.Intn(len(graph.Edges))
+		edge := graph.Edges[edgeIndex]
 		u, v := edge.From-1, edge.To-1
+
 		Z1 := common.ModularExponentiationBig(Z[u], c[u], n[u])
 		Z2 := common.ModularExponentiationBig(Z[v], c[v], n[v])
-		mask := big.NewInt(3)
+
+		mask := big.NewInt(3) // Маска для младших двух бит
 		Z1LowerBits := new(big.Int).And(Z1, mask)
 		Z2LowerBits := new(big.Int).And(Z2, mask)
+
+		fmt.Printf("Проверка ребра %d-%d: Z1LowerBits = %d%d, Z2LowerBits = %d%d\n",
+			edge.From, edge.To, Z1LowerBits.Bit(1), Z1LowerBits.Bit(0), Z2LowerBits.Bit(1), Z2LowerBits.Bit(0))
+
 		if Z1LowerBits.Cmp(Z2LowerBits) == 0 {
-			return fmt.Sprintf("Ошибка: вершины %d и %d имеют одинаковые младшие биты!", edge.From, edge.To)
+			return fmt.Sprintf("Ошибка: совпадение младших битов у вершин %d и %d.\n", edge.From, edge.To)
 		}
 	}
 	return "Граф раскрашен корректно!"
@@ -226,7 +237,7 @@ func modifyRByColor(r *big.Int, color string) *big.Int {
 	default:
 		log.Fatalf("Неизвестный цвет: %s", color)
 	}
-	fmt.Printf("r (after modification) = %d%d\n", r.Bit(0), r.Bit(1))
+	fmt.Printf("r (after modification) = %d%d\n", r.Bit(1), r.Bit(0))
 	return r
 }
 
