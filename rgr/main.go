@@ -132,45 +132,41 @@ func visualizeGraph(graph *Graph) *fyne.Container {
 }
 
 func checkGraphColoring(graph *Graph) string {
-	vertexNum := graph.Vertices
-	edges := graph.Edges
-	colors := graph.Colors
-
-	fmt.Printf("Граф содержит %d вершин и %d рёбер:\n", vertexNum, len(edges))
-	for i, edge := range edges {
+	fmt.Printf("Граф содержит %d вершин и %d рёбер:\n", graph.Vertices, len(graph.Edges))
+	for i, edge := range graph.Edges {
 		fmt.Printf("%d %d (ребро %d)\n", edge.From, edge.To, i+1)
 	}
-	fmt.Println("Исходная раскраска:", strings.Join(colors, " "))
+	fmt.Println("Исходная раскраска:", strings.Join(graph.Colors, " "))
 
 	// Перекрашивание
-	everyColorIsValid := lo.EveryBy(colors, func(item string) bool {
+	everyColorIsValid := lo.EveryBy(graph.Colors, func(item string) bool {
 		return lo.Contains([]string{"R", "B", "Y"}, item)
 	})
 	if !everyColorIsValid {
 		return fmt.Sprintln("Неизвестный цвет в раскраске графа")
 	}
-	uniqueColors := lo.Uniq(colors)
+	uniqueColors := lo.Uniq(graph.Colors)
 	shuffledColors := shuffleUntilDifferent(uniqueColors)
 	colorMapping := make(map[string]string)
 	for i, iColor := range uniqueColors {
 		colorMapping[iColor] = shuffledColors[i]
 	}
-	recoloredColors := lo.Map(colors, func(iColor string, _ int) string {
+	recoloredColors := lo.Map(graph.Colors, func(iColor string, _ int) string {
 		return colorMapping[iColor]
 	})
 	fmt.Println("Перекрашенная раскраска:", strings.Join(recoloredColors, " "))
 
 	// Генерация криптографических параметров
-	r := make([]*big.Int, vertexNum)
-	p := make([]*big.Int, vertexNum)
-	q := make([]*big.Int, vertexNum)
-	n := make([]*big.Int, vertexNum)
-	phi := make([]*big.Int, vertexNum)
-	d := make([]*big.Int, vertexNum)
-	c := make([]*big.Int, vertexNum)
-	Z := make([]*big.Int, vertexNum)
+	r := make([]*big.Int, graph.Vertices)
+	p := make([]*big.Int, graph.Vertices)
+	q := make([]*big.Int, graph.Vertices)
+	n := make([]*big.Int, graph.Vertices)
+	phi := make([]*big.Int, graph.Vertices)
+	d := make([]*big.Int, graph.Vertices)
+	c := make([]*big.Int, graph.Vertices)
+	Z := make([]*big.Int, graph.Vertices)
 
-	for i := 0; i < vertexNum; i++ {
+	for i := 0; i < graph.Vertices; i++ {
 		// Генерируем простые числа p и q
 		p[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
 		q[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
@@ -189,7 +185,7 @@ func checkGraphColoring(graph *Graph) string {
 		Z[i] = common.ModularExponentiationBig(r[i], d[i], n[i])
 	}
 
-	for _, edge := range edges {
+	for _, edge := range graph.Edges {
 		u, v := edge.From-1, edge.To-1
 		Z1 := common.ModularExponentiationBig(Z[u], c[u], n[u])
 		Z2 := common.ModularExponentiationBig(Z[v], c[v], n[v])
@@ -220,13 +216,17 @@ func modifyRByColor(r *big.Int, color string) *big.Int {
 	r = new(big.Int).And(r, new(big.Int).Not(big.NewInt(3)))
 	switch color {
 	case "R":
+		fmt.Printf("[R]: ")
 	case "B":
+		fmt.Printf("[B]: ")
 		r = new(big.Int).Or(r, big.NewInt(1))
 	case "Y":
+		fmt.Printf("[Y]: ")
 		r = new(big.Int).Or(r, big.NewInt(2))
 	default:
 		log.Fatalf("Неизвестный цвет: %s", color)
 	}
+	fmt.Printf("r (after modification) = %d%d\n", r.Bit(0), r.Bit(1))
 	return r
 }
 
