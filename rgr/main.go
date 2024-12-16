@@ -12,6 +12,7 @@ import (
 	"strings"
 )
 
+// Edge представляет ребро графа
 type Edge struct {
 	From  int
 	To    int
@@ -86,6 +87,25 @@ func equalSlices(slice1, slice2 []string) bool {
 	return true
 }
 
+// modifyRByColor модифицирует младшие биты r в зависимости от цвета
+func modifyRByColor(r *big.Int, color string) *big.Int {
+	// Обнуляем младшие 2 бита
+	r = new(big.Int).And(r, new(big.Int).Not(big.NewInt(3))) // r &= ~3
+
+	switch color {
+	case "R": // Красный
+		// Младшие биты 00 — ничего не делаем
+	case "B": // Синий
+		r = new(big.Int).Or(r, big.NewInt(1)) // Младшие биты 01
+	case "Y": // Жёлтый
+		r = new(big.Int).Or(r, big.NewInt(2)) // Младшие биты 10
+	default:
+		log.Fatalf("Неизвестный цвет: %s", color)
+	}
+
+	return r
+}
+
 func main() {
 	filename := "correct_graph.txt"
 
@@ -148,6 +168,9 @@ func main() {
 		// Генерируем случайное число r
 		r[i] = common.GenCoprimeBig(n[i], big.NewInt(1), n[i])
 
+		// Модифицируем r по цвету
+		r[i] = modifyRByColor(r[i], recoloredColors[i])
+
 		// Вычисляем Z = r^d mod n
 		Z[i] = common.ModularExponentiationBig(r[i], d[i], n[i])
 	}
@@ -163,7 +186,11 @@ func main() {
 		Z2 := common.ModularExponentiationBig(Z[v], c[v], n[v])
 
 		// Сравниваем младшие 2 бита
-		if Z1.Bit(0) != Z2.Bit(0) || Z1.Bit(1) != Z2.Bit(1) {
+		mask := big.NewInt(3) // Маска для младших 2 бит
+		Z1LowerBits := new(big.Int).And(Z1, mask)
+		Z2LowerBits := new(big.Int).And(Z2, mask)
+
+		if Z1LowerBits.Cmp(Z2LowerBits) != 0 {
 			fmt.Printf("Для ребра %d два младших бита различны.\n", edge.Index)
 		} else {
 			flag = true
