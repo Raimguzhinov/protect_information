@@ -3,58 +3,231 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/Raimguzhinov/protect-information/common"
-	"github.com/samber/lo"
+	"image/color"
 	"log"
+	"math"
 	"math/big"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
+	"github.com/Raimguzhinov/protect-information/common"
+	"github.com/samber/lo"
 )
 
-// Edge представляет ребро графа
 type Edge struct {
-	From  int
-	To    int
-	Index int
+	From, To int
 }
 
-// Чтение графа из файла
-func readGraph(filename string) ([]Edge, []string, int, error) {
+type Graph struct {
+	Vertices int
+	Edges    []Edge
+	Colors   []string
+}
+
+func readGraphFromFile(filename string) (*Graph, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, err
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}(file)
 
 	scanner := bufio.NewScanner(file)
 
-	// Считываем количество вершин и рёбер
 	scanner.Scan()
-	var vertexNum, edgeNum int
-	_, err = fmt.Sscanf(scanner.Text(), "%d %d", &vertexNum, &edgeNum)
+	line := scanner.Text()
+	parts := strings.Fields(line)
+	vertices, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, err
+	}
+	edgesCount, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return nil, err
 	}
 
-	edges := make([]Edge, 0, edgeNum)
-
-	// Считываем рёбра
-	for i := 0; i < edgeNum; i++ {
+	edges := make([]Edge, edgesCount)
+	for i := 0; i < edgesCount; i++ {
 		scanner.Scan()
-		var from, to int
-		_, err = fmt.Sscanf(scanner.Text(), "%d %d", &from, &to)
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		from, err := strconv.Atoi(parts[0])
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, err
 		}
-		edges = append(edges, Edge{From: from, To: to, Index: i + 1})
+		to, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return nil, err
+		}
+		edges[i] = Edge{From: from, To: to}
 	}
 
-	// Считываем цвета вершин
 	scanner.Scan()
 	colors := strings.Fields(scanner.Text())
 
-	return edges, colors, vertexNum, nil
+	return &Graph{
+		Vertices: vertices,
+		Edges:    edges,
+		Colors:   colors,
+	}, nil
+}
+
+func visualizeGraph(graph *Graph) *fyne.Container {
+	width, height := 800.0, 600.0
+	centerX, centerY := width/2, height/2
+	radius := 200.0
+
+	vertexCoords := make(map[int]fyne.Position)
+	angleStep := 2 * math.Pi / float64(graph.Vertices)
+	for i := 0; i < graph.Vertices; i++ {
+		angle := angleStep * float64(i)
+		x := centerX + radius*math.Cos(angle)
+		y := centerY + radius*math.Sin(angle)
+		vertexCoords[i+1] = fyne.NewPos(float32(x), float32(y))
+	}
+
+	lines := []fyne.CanvasObject{}
+	for _, edge := range graph.Edges {
+		from, to := vertexCoords[edge.From], vertexCoords[edge.To]
+		line := canvas.NewLine(color.White)
+		line.Position1, line.Position2 = from, to
+		line.StrokeWidth = 2
+		lines = append(lines, line)
+	}
+
+	circles := []fyne.CanvasObject{}
+	for i := 0; i < graph.Vertices; i++ {
+		pos := vertexCoords[i+1]
+		col := parseColor(graph.Colors[i])
+		circle := canvas.NewCircle(col)
+		circle.Move(fyne.NewPos(pos.X-15, pos.Y-15))
+		circle.Resize(fyne.NewSize(30, 30))
+		circles = append(circles, circle)
+	}
+
+	labels := []fyne.CanvasObject{}
+	for i := 0; i < graph.Vertices; i++ {
+		pos := vertexCoords[i+1]
+		label := canvas.NewText(fmt.Sprintf("%d", i+1), color.White)
+		label.Alignment = fyne.TextAlignCenter
+		label.Move(fyne.NewPos(pos.X-10, pos.Y-30))
+		labels = append(labels, label)
+	}
+
+	allObjects := append(lines, circles...)
+	allObjects = append(allObjects, labels...)
+	return container.NewWithoutLayout(allObjects...)
+}
+
+func checkGraphColoring(graph *Graph) string {
+	vertexNum := graph.Vertices
+	edges := graph.Edges
+	colors := graph.Colors
+
+	fmt.Printf("Граф содержит %d вершин и %d рёбер:\n", vertexNum, len(edges))
+	for i, edge := range edges {
+		fmt.Printf("%d %d (ребро %d)\n", edge.From, edge.To, i+1)
+	}
+	fmt.Println("Исходная раскраска:", strings.Join(colors, " "))
+
+	// Перекрашивание
+	everyColorIsValid := lo.EveryBy(colors, func(item string) bool {
+		return lo.Contains([]string{"R", "B", "Y"}, item)
+	})
+	if !everyColorIsValid {
+		return fmt.Sprintln("Неизвестный цвет в раскраске графа")
+	}
+	uniqueColors := lo.Uniq(colors)
+	shuffledColors := shuffleUntilDifferent(uniqueColors)
+	colorMapping := make(map[string]string)
+	for i, iColor := range uniqueColors {
+		colorMapping[iColor] = shuffledColors[i]
+	}
+	recoloredColors := lo.Map(colors, func(iColor string, _ int) string {
+		return colorMapping[iColor]
+	})
+	fmt.Println("Перекрашенная раскраска:", strings.Join(recoloredColors, " "))
+
+	// Генерация криптографических параметров
+	r := make([]*big.Int, vertexNum)
+	p := make([]*big.Int, vertexNum)
+	q := make([]*big.Int, vertexNum)
+	n := make([]*big.Int, vertexNum)
+	phi := make([]*big.Int, vertexNum)
+	d := make([]*big.Int, vertexNum)
+	c := make([]*big.Int, vertexNum)
+	Z := make([]*big.Int, vertexNum)
+
+	for i := 0; i < vertexNum; i++ {
+		// Генерируем простые числа p и q
+		p[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
+		q[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
+		// Вычисляем n = p * q и φ(n) = (p - 1) * (q - 1)
+		n[i] = new(big.Int).Mul(p[i], q[i])
+		phi[i] = new(big.Int).Mul(new(big.Int).Sub(p[i], big.NewInt(1)), new(big.Int).Sub(q[i], big.NewInt(1)))
+		// Генерируем взаимно простое число d
+		d[i] = common.GenCoprimeBig(phi[i], big.NewInt(2), phi[i])
+		// Вычисляем обратное число c = d^-1 mod φ(n)
+		c[i], _ = common.ModInverseBig(d[i], phi[i])
+		// Генерируем случайное число r
+		r[i] = common.GenCoprimeBig(n[i], big.NewInt(1), n[i])
+		// Модифицируем r по цвету
+		r[i] = modifyRByColor(r[i], recoloredColors[i])
+		// Вычисляем Z = r^d mod n
+		Z[i] = common.ModularExponentiationBig(r[i], d[i], n[i])
+	}
+
+	for _, edge := range edges {
+		u, v := edge.From-1, edge.To-1
+		Z1 := common.ModularExponentiationBig(Z[u], c[u], n[u])
+		Z2 := common.ModularExponentiationBig(Z[v], c[v], n[v])
+		mask := big.NewInt(3)
+		Z1LowerBits := new(big.Int).And(Z1, mask)
+		Z2LowerBits := new(big.Int).And(Z2, mask)
+		if Z1LowerBits.Cmp(Z2LowerBits) == 0 {
+			return fmt.Sprintf("Ошибка: вершины %d и %d имеют одинаковые младшие биты!", edge.From, edge.To)
+		}
+	}
+	return "Граф раскрашен корректно!"
+}
+
+func parseColor(iColor string) color.Color {
+	switch strings.ToUpper(iColor) {
+	case "R":
+		return color.NRGBA{R: 255, G: 0, B: 0, A: 255}
+	case "B":
+		return color.NRGBA{R: 0, G: 0, B: 255, A: 255}
+	case "Y":
+		return color.NRGBA{R: 255, G: 255, B: 0, A: 255}
+	default:
+		return color.Black
+	}
+}
+
+func modifyRByColor(r *big.Int, color string) *big.Int {
+	r = new(big.Int).And(r, new(big.Int).Not(big.NewInt(3)))
+	switch color {
+	case "R":
+	case "B":
+		r = new(big.Int).Or(r, big.NewInt(1))
+	case "Y":
+		r = new(big.Int).Or(r, big.NewInt(2))
+	default:
+		log.Fatalf("Неизвестный цвет: %s", color)
+	}
+	return r
 }
 
 // shuffleUntilDifferent гарантирует, что перемешанный срез отличается от оригинального
@@ -87,120 +260,42 @@ func equalSlices(slice1, slice2 []string) bool {
 	return true
 }
 
-// modifyRByColor модифицирует младшие биты r в зависимости от цвета
-func modifyRByColor(r *big.Int, color string) *big.Int {
-	// Обнуляем младшие 2 бита
-	r = new(big.Int).And(r, new(big.Int).Not(big.NewInt(3))) // r &= ~3
-
-	switch color {
-	case "R": // Красный
-		// Младшие биты 00 — ничего не делаем
-	case "B": // Синий
-		r = new(big.Int).Or(r, big.NewInt(1)) // Младшие биты 01
-	case "Y": // Жёлтый
-		r = new(big.Int).Or(r, big.NewInt(2)) // Младшие биты 10
-	default:
-		log.Fatalf("Неизвестный цвет: %s", color)
-	}
-
-	return r
-}
-
 func main() {
-	filename := "correct_graph.txt"
+	a := app.New()
+	w := a.NewWindow("Graph Coloring Visualizer")
+	w.Resize(fyne.NewSize(900, 700))
 
-	// Чтение графа из файла
-	edges, colors, vertexNum, err := readGraph(filename)
-	if err != nil {
-		log.Fatalf("Ошибка чтения графа: %v", err)
-	}
+	graphContainer := container.NewVBox()
+	var currentGraph *Graph
 
-	fmt.Printf("Граф содержит %d вершин и %d рёбер:\n", vertexNum, len(edges))
-	for _, edge := range edges {
-		fmt.Printf("%d %d (ребро %d)\n", edge.From, edge.To, edge.Index)
-	}
-
-	fmt.Println("Исходная раскраска:", strings.Join(colors, " "))
-
-	// Перекрашивание
-	everyColorIsValid := lo.EveryBy(colors, func(item string) bool {
-		return lo.Contains([]string{"R", "B", "Y"}, item)
+	chooseFileButton := widget.NewButton("Выбрать файл", func() {
+		dialog.NewFileOpen(func(file fyne.URIReadCloser, err error) {
+			if file == nil {
+				return
+			}
+			graph, err := readGraphFromFile(file.URI().Path())
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			currentGraph = graph
+			graphContainer.Objects = []fyne.CanvasObject{visualizeGraph(graph)}
+			graphContainer.Refresh()
+		}, w).Show()
 	})
-	if !everyColorIsValid {
-		log.Fatalln("Неизвестный цвет в раскраске графа")
-	}
-	uniqueColors := lo.Uniq(colors)
-	shuffledColors := shuffleUntilDifferent(uniqueColors)
-	colorMapping := make(map[string]string)
-	for i, color := range uniqueColors {
-		colorMapping[color] = shuffledColors[i]
-	}
-	recoloredColors := lo.Map(colors, func(color string, _ int) string {
-		return colorMapping[color]
-	})
-	fmt.Println("Перекрашенная раскраска:", strings.Join(recoloredColors, " "))
 
-	// Генерация криптографических параметров
-	r := make([]*big.Int, vertexNum)
-	p := make([]*big.Int, vertexNum)
-	q := make([]*big.Int, vertexNum)
-	n := make([]*big.Int, vertexNum)
-	phi := make([]*big.Int, vertexNum)
-	d := make([]*big.Int, vertexNum)
-	c := make([]*big.Int, vertexNum)
-	Z := make([]*big.Int, vertexNum)
-
-	for i := 0; i < vertexNum; i++ {
-		// Генерируем простые числа p и q
-		p[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
-		q[i] = common.GenPrimeBig(big.NewInt(32500), big.NewInt(45000))
-
-		// Вычисляем n = p * q и φ(n) = (p - 1) * (q - 1)
-		n[i] = new(big.Int).Mul(p[i], q[i])
-		phi[i] = new(big.Int).Mul(new(big.Int).Sub(p[i], big.NewInt(1)), new(big.Int).Sub(q[i], big.NewInt(1)))
-
-		// Генерируем взаимно простое число d
-		d[i] = common.GenCoprimeBig(phi[i], big.NewInt(2), phi[i])
-
-		// Вычисляем обратное число c = d^-1 mod φ(n)
-		c[i], _ = common.ModInverseBig(d[i], phi[i])
-
-		// Генерируем случайное число r
-		r[i] = common.GenCoprimeBig(n[i], big.NewInt(1), n[i])
-
-		// Модифицируем r по цвету
-		r[i] = modifyRByColor(r[i], recoloredColors[i])
-
-		// Вычисляем Z = r^d mod n
-		Z[i] = common.ModularExponentiationBig(r[i], d[i], n[i])
-	}
-
-	// Проверка корректности раскраски
-	flag := false
-	for _, edge := range edges {
-		u := edge.From - 1
-		v := edge.To - 1
-
-		// Вычисляем Z1 и Z2 для вершин u и v
-		Z1 := common.ModularExponentiationBig(Z[u], c[u], n[u])
-		Z2 := common.ModularExponentiationBig(Z[v], c[v], n[v])
-
-		// Сравниваем младшие 2 бита
-		mask := big.NewInt(3) // Маска для младших 2 бит
-		Z1LowerBits := new(big.Int).And(Z1, mask)
-		Z2LowerBits := new(big.Int).And(Z2, mask)
-
-		if Z1LowerBits.Cmp(Z2LowerBits) != 0 {
-			fmt.Printf("Для ребра %d два младших бита различны.\n", edge.Index)
-		} else {
-			flag = true
-			fmt.Printf("Ошибка! Два последних бита совпадают у ребра %d.\n", edge.Index)
+	checkButton := widget.NewButton("Проверить раскраску", func() {
+		if currentGraph == nil {
+			dialog.ShowInformation("Ошибка", "Граф не загружен.", w)
+			return
 		}
-	}
+		result := checkGraphColoring(currentGraph)
+		dialog.ShowInformation("Результат проверки", result, w)
+	})
 
-	if flag {
-		fmt.Println("Ошибка в раскраске графа!")
-	} else {
-		fmt.Println("Граф раскрашен корректно!")
-	}
+	w.SetContent(container.NewBorder(
+		container.NewHBox(chooseFileButton, checkButton), nil, nil, nil, graphContainer,
+	))
+
+	w.ShowAndRun()
 }
